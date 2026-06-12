@@ -1,11 +1,12 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "679593c2b486ba9a2ad0eb1472a77a1f38e2b9298c2399814680f8342e60bd69"
+            "sha256": "eca1046ccf7c627acd151ff602eb9eba3670d02f2b5d14100be490318d8c9795"
         },
         "pipfile-spec": 6,
         "requires": {
-            "python_version": "3.12.7"
+            "python_full_version": "3.12.7",
+            "python_version": "3.12"
         },
         "sources": [
             {
@@ -938,6 +939,23 @@
             ],
             "markers": "python_version >= '3.10'",
             "version": "==5.9.1"
+        },
+        "kagglehub": {
+            "hashes": [
+                "sha256:08abae0c1e249904003ce6f23c189166e3032220478426a552c77c2edb08b93a",
+                "sha256:ffad2d79cfda9b06848e98cb0a4a48e286285cfba4aeadadc0b8dbd9bcadd372"
+            ],
+            "index": "pypi",
+            "markers": "python_version >= '3.10'",
+            "version": "==1.0.2"
+        },
+        "kagglesdk": {
+            "hashes": [
+                "sha256:47c6643066d965b7898e960fddcde07e151bea1ae1c1c381e25a5a041edf881d",
+                "sha256:dbd063e1805a5ef947a8c0a6e43b232eb01697f08baf3310bc3dde6dfe5a0193"
+            ],
+            "markers": "python_version >= '3.11'",
+            "version": "==0.1.30"
         },
         "kiwisolver": {
             "hashes": [
@@ -2534,6 +2552,7 @@
                 "sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0",
                 "sha256:f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed"
             ],
+            "index": "pypi",
             "markers": "python_version >= '3.10'",
             "version": "==2.34.2"
         },

@@ -15,6 +15,7 @@ optuna = "*"
 seaborn = "*"
 optuna-integration = {extras = ["mlflow"], version = "*"}
 ipykernel = "*"
+kagglehub = "*"
 
 [dev-packages]
 

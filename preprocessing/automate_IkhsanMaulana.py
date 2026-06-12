@@ -1,272 +1,297 @@
-# %% [markdown]
-# # **1. Perkenalan Dataset**
-# 
-
-# %% [markdown]
-# Tahap pertama, Anda harus mencari dan menggunakan dataset dengan ketentuan sebagai berikut:
-# 
-# 1. **Sumber Dataset**:  
-#    Dataset dapat diperoleh dari berbagai sumber, seperti public repositories (*Kaggle*, *UCI ML Repository*, *Open Data*) atau data primer yang Anda kumpulkan sendiri.
-# 
-
-# %%
-!curl -L -o ./heart-disease-data.zip \
-  https://www.kaggle.com/api/v1/datasets/download/redwankarimsony/heart-disease-data
-
-!unzip -o ./heart-disease-data.zip
-!cp -f ./heart_disease_uci.csv ./heartdiseaseuci_raw.csv
-
-# %% [markdown]
-# # **2. Import Library**
-
-# %% [markdown]
-# Pada tahap ini, Anda perlu mengimpor beberapa pustaka (library) Python yang dibutuhkan untuk analisis data dan pembangunan model machine learning atau deep learning.
-
-# %%
+import warnings
 import os
+import joblib
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import matplotlib.pyplot as plt
-import joblib
-
+import kagglehub
 from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.impute import SimpleImputer
-from sklearn.experimental import enable_iterative_imputer
-from sklearn.impute import IterativeImputer
-
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.ensemble import RandomForestRegressor
-
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.metrics import accuracy_score, confusion_matrix, classification_report, mean_absolute_error,r2_score,mean_squared_error
-import warnings
 from sklearn.exceptions import ConvergenceWarning
+from sklearn.experimental import enable_iterative_imputer  # noqa
+from sklearn.impute import IterativeImputer, SimpleImputer
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
-# %% [markdown]
-# # **3. Memuat Dataset**
 
-# %% [markdown]
-# Pada tahap ini, Anda perlu memuat dataset ke dalam notebook. Jika dataset dalam format CSV, Anda bisa menggunakan pustaka pandas untuk membacanya. Pastikan untuk mengecek beberapa baris awal dataset untuk memahami strukturnya dan memastikan data telah dimuat dengan benar.
-# 
-# Jika dataset berada di Google Drive, pastikan Anda menghubungkan Google Drive ke Colab terlebih dahulu. Setelah dataset berhasil dimuat, langkah berikutnya adalah memeriksa kesesuaian data dan siap untuk dianalisis lebih lanjut.
-# 
-# Jika dataset berupa unstructured data, silakan sesuaikan dengan format seperti kelas Machine Learning Pengembangan atau Machine Learning Terapan
+def download_dataset_from_kagglehub(
+    kaggle_dataset: str,
+    kaggle_csv_filename: str,
+    dataset_path: str,
+) -> str:
+    csv_path = kagglehub.dataset_download(
+        kaggle_dataset,
+        path=kaggle_csv_filename,
+        output_dir=dataset_path,
+        force_download=False,
+    )
+    return csv_path
 
-# %%
-df = pd.read_csv("heartdiseaseuci_raw.csv")
-df.info()
-df.head()
 
-# %% [markdown]
-# # **4. Exploratory Data Analysis (EDA)**
-# 
-# Pada tahap ini, Anda akan melakukan **Exploratory Data Analysis (EDA)** untuk memahami karakteristik dataset.
-# 
-# Tujuan dari EDA adalah untuk memperoleh wawasan awal yang mendalam mengenai data dan menentukan langkah selanjutnya dalam analisis atau pemodelan.
+def load_dataset(csv_path: str) -> pd.DataFrame:
+    if not os.path.exists(csv_path):
+        raise FileNotFoundError(f"Dataset tidak ditemukan: {csv_path}")
 
-# %%
+    return pd.read_csv(csv_path)
+
+
+def save_and_show_plot(filename: str, output_dir: str) -> None:
+    os.makedirs(output_dir, exist_ok=True)
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, filename), dpi=150, bbox_inches="tight")
+    if "agg" not in plt.get_backend().lower():
+        plt.show()
+    plt.close()
+
+
 def check_dataset(df: pd.DataFrame) -> None:
     n_rows, n_cols = df.shape
-    print(f"Dataset shape: {n_rows} Rows x {n_cols} Columns", end='\n\n')
-    print(f"Duplicate rows: {df.duplicated().sum()}", end='\n\n')
-    print("Column Information:")
-    info_table = pd.DataFrame(
+    print(f"Dataset shape: {n_rows} Rows x {n_cols} Columns", end="\n\n")
+
+    print("Describe dataset:")
+    print(df.describe(include="all"), end="\n\n")
+
+    missing_counts = df.isnull().sum()
+    columns_with_missing = missing_counts[missing_counts > 0].sort_values(
+        ascending=False
+    )
+    columns_without_missing = missing_counts[missing_counts == 0]
+
+    print("Kolom yang punya missing values:")
+    if columns_with_missing.empty:
+        print("Tidak ada kolom yang punya missing values.")
+    else:
+        missing_table = columns_with_missing.rename("missing_count").to_frame()
+        missing_table["missing_pct"] = (
+            missing_table["missing_count"] / len(df) * 100
+        ).round(2)
+        print(missing_table)
+    print()
+
+    print("Kolom yang tidak punya missing values:")
+    if columns_without_missing.empty:
+        print("Tidak ada kolom yang bebas missing values.")
+    else:
+        print(columns_without_missing.index.tolist())
+    print()
+
+    duplicate_rows = df[df.duplicated(keep=False)]
+    print(f"Jumlah baris duplikat: {df.duplicated().sum()}")
+    print("Baris yang duplikat:")
+    if duplicate_rows.empty:
+        print("Tidak ada baris duplikat.")
+    else:
+        print(duplicate_rows)
+    print()
+
+    print("Lowest value, highest value, dan total unique value semua kolom:")
+    print(build_column_summary(df), end="\n\n")
+
+
+def build_column_summary(df: pd.DataFrame) -> pd.DataFrame:
+    summary_rows = []
+
+    for col in df.columns:
+        series = df[col]
+        non_null_series = series.dropna()
+
+        if non_null_series.empty:
+            lowest_value = np.nan
+            highest_value = np.nan
+        elif pd.api.types.is_numeric_dtype(series):
+            lowest_value = series.min(skipna=True)
+            highest_value = series.max(skipna=True)
+        else:
+            string_series = non_null_series.astype(str)
+            lowest_value = string_series.min()
+            highest_value = string_series.max()
+
+        summary_rows.append(
+            {
+                "column": col,
+                "dtype": series.dtype,
+                "missing_count": series.isna().sum(),
+                "lowest_value": lowest_value,
+                "highest_value": highest_value,
+                "total_unique_value": series.nunique(dropna=True),
+            }
+        )
+
+    return pd.DataFrame(summary_rows)
+
+
+def print_num_analysis(df: pd.DataFrame, target_column: str) -> None:
+    health_status = np.where(df[target_column] > 0, "Sakit", "Sehat")
+    health_counts = pd.Series(health_status, name="health_status").value_counts()
+    health_summary = pd.DataFrame(
         {
-            "DataType": df.dtypes,
-            "Missing Values Count": df.isnull().sum(),
-            "Unique Values Count": df.nunique(dropna=True),
+            "count": health_counts,
+            "percentage": (health_counts / len(df) * 100).round(2),
         }
     )
-    print(info_table, end='\n\n')
-    print("Summary statistics:")
-    print(df.describe(include="all"), end='\n\n')
-    print("5 row from dataset:")
-    print(df.head(5))
 
-# %%
-check_dataset(df)
+    stage_counts = df[target_column].value_counts().sort_index()
+    stage_summary = pd.DataFrame(
+        {
+            "count": stage_counts,
+            "percentage": (stage_counts / len(df) * 100).round(2),
+        }
+    )
+
+    print("Kolom num - jumlah dan persentase orang sakit dan sehat:")
+    print(health_summary, end="\n\n")
+
+    print("Kolom num - jumlah dan persentase berdasarkan stage:")
+    print(stage_summary, end="\n\n")
 
 
-numerical_cols = df.select_dtypes(include=["number"]).columns.tolist()
-categorical_cols = df.select_dtypes(exclude=["number"]).columns.tolist()
+def plot_all_column_distributions(df: pd.DataFrame, output_dir: str) -> None:
+    for col in df.columns:
+        plt.figure(figsize=(10, 5))
 
-print("\nNumerical Columns:", numerical_cols)
-print("Categorical Columns:", categorical_cols)
-
-print("\nNumerical Summary:")
-print(df[numerical_cols].describe().T)
-
-if categorical_cols:
-    print("\nCategorical Summary:")
-    print(df[categorical_cols].describe().T)
-
-# Tambahkan target biner agar analisis penyakit jantung lebih mudah dibaca.
-df["target"] = np.where(df["num"] > 0, 1, 0)
-
-print("\nTarget Distribution (Original - num):")
-print(df["num"].value_counts().sort_index())
-
-print("\nTarget Distribution (Binary - target):")
-print(df["target"].value_counts().sort_index())
-
-print("\nMissing Values by Column:")
-missing_table = (
-    df.isnull()
-    .sum()
-    .sort_values(ascending=False)
-    .rename("missing_count")
-    .to_frame()
-)
-missing_table["missing_pct"] = (missing_table["missing_count"] / len(df) * 100).round(2)
-print(missing_table[missing_table["missing_count"] > 0])
-
-if sns is not None:
-    sns.set_theme(style="whitegrid")
-else:
-    plt.style.use("ggplot")
-
-plt.figure(figsize=(8, 4))
-target_counts = df["target"].value_counts().sort_index()
-if sns is not None:
-    sns.barplot(x=target_counts.index, y=target_counts.values, hue=target_counts.index, palette="Set2", legend=False)
-else:
-    plt.bar(target_counts.index.astype(str), target_counts.values, color=["#66c2a5", "#fc8d62"])
-plt.title("Distribusi Target Biner")
-plt.xlabel("Target (0 = Tidak Sakit, 1 = Sakit)")
-plt.ylabel("Jumlah")
-plt.tight_layout()
-plt.show()
-
-plt.figure(figsize=(8, 4))
-num_counts = df["num"].value_counts().sort_index()
-if sns is not None:
-    sns.barplot(x=num_counts.index, y=num_counts.values, hue=num_counts.index, palette="viridis", legend=False)
-else:
-    plt.bar(num_counts.index.astype(str), num_counts.values, color=plt.cm.viridis(np.linspace(0.2, 0.9, len(num_counts))))
-plt.title("Distribusi Kelas Target Asli")
-plt.xlabel("Tingkat Penyakit Jantung (num)")
-plt.ylabel("Jumlah")
-plt.tight_layout()
-plt.show()
-
-plt.figure(figsize=(10, 5))
-missing_pct = missing_table[missing_table["missing_count"] > 0]
-if not missing_pct.empty:
-    if sns is not None:
-        sns.barplot(
-            x=missing_pct.index,
-            y=missing_pct["missing_pct"],
-            hue=missing_pct.index,
-            palette="Reds_r",
-            legend=False,
-        )
-    else:
-        plt.bar(missing_pct.index, missing_pct["missing_pct"], color="#d62728")
-    plt.title("Persentase Missing Values per Kolom")
-    plt.xlabel("Kolom")
-    plt.ylabel("Missing (%)")
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    plt.show()
-else:
-    print("\nTidak ada missing values pada dataset.")
-
-key_numeric_cols = ["age", "trestbps", "chol", "thalch", "oldpeak"]
-available_key_numeric_cols = [col for col in key_numeric_cols if col in df.columns]
-
-if available_key_numeric_cols:
-    df[available_key_numeric_cols].hist(figsize=(14, 8), bins=20, edgecolor="black")
-    plt.suptitle("Distribusi Fitur Numerik Utama", y=1.02)
-    plt.tight_layout()
-    plt.show()
-
-if available_key_numeric_cols:
-    plt.figure(figsize=(8, 5))
-    if sns is not None:
-        sns.boxplot(data=df[available_key_numeric_cols], palette="pastel")
-    else:
-        plt.boxplot([df[col].dropna() for col in available_key_numeric_cols], tick_labels=available_key_numeric_cols)
-    plt.title("Boxplot Fitur Numerik Utama")
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    plt.show()
-
-if available_key_numeric_cols:
-    plt.figure(figsize=(12, 8))
-    correlation_matrix = df[available_key_numeric_cols + ["num", "target"]].corr(numeric_only=True)
-    if sns is not None:
-        sns.heatmap(correlation_matrix, annot=True, cmap="coolwarm", fmt=".2f")
-    else:
-        plt.imshow(correlation_matrix, cmap="coolwarm", aspect="auto")
-        plt.colorbar()
-        plt.xticks(range(len(correlation_matrix.columns)), correlation_matrix.columns, rotation=45)
-        plt.yticks(range(len(correlation_matrix.index)), correlation_matrix.index)
-        for i in range(len(correlation_matrix.index)):
-            for j in range(len(correlation_matrix.columns)):
-                plt.text(j, i, f"{correlation_matrix.iloc[i, j]:.2f}", ha="center", va="center", color="black")
-    plt.title("Heatmap Korelasi Fitur Numerik")
-    plt.tight_layout()
-    plt.show()
-
-for col in ["sex", "cp", "dataset", "thal", "exang"]:
-    if col in df.columns:
-        plt.figure(figsize=(10, 4))
-        crosstab = pd.crosstab(df[col], df["target"]).reindex(df[col].value_counts().index)
-        if sns is not None:
-            sns.countplot(data=df, x=col, hue="target", order=crosstab.index, palette="Set1")
+        if pd.api.types.is_numeric_dtype(df[col]):
+            sns.histplot(data=df, x=col, bins=30, kde=True)
+            plt.title(f"Distribusi Kolom {col}")
+            plt.xlabel(col)
+            plt.ylabel("Frekuensi")
+            save_and_show_plot(f"distribution_{col}.png", output_dir)
         else:
-            crosstab.plot(kind="bar", ax=plt.gca(), color=["#4daf4a", "#e41a1c"])
-        plt.title(f"Distribusi {col} Berdasarkan Target")
-        plt.xlabel(col)
-        plt.ylabel("Jumlah")
-        plt.xticks(rotation=30)
-        plt.tight_layout()
-        plt.show()
+            order = df[col].value_counts(dropna=False).index
+            sns.countplot(data=df, x=col, order=order)
+            plt.title(f"Distribusi Kolom {col}")
+            plt.xlabel(col)
+            plt.ylabel("Jumlah")
+            plt.xticks(rotation=30, ha="right")
+            save_and_show_plot(f"distribution_{col}.png", output_dir)
 
-# %% [markdown]
-# # **5. Data Preprocessing**
+    # Analisis: distribusi semua kolom menunjukkan dataset didominasi pasien Male
+    # sebanyak 726 baris, chest pain asymptomatic sebanyak 496 baris, dan stage num
+    # 0/1. Kolom trestbps dan chol memiliki nilai minimum 0 sehingga perlu ditinjau
+    # sebagai nilai yang tidak wajar untuk tekanan darah dan kolesterol.
 
-# %% [markdown]
-# Pada tahap ini, data preprocessing adalah langkah penting untuk memastikan kualitas data sebelum digunakan dalam model machine learning.
-# 
-# Jika Anda menggunakan data teks, data mentah sering kali mengandung nilai kosong, duplikasi, atau rentang nilai yang tidak konsisten, yang dapat memengaruhi kinerja model. Oleh karena itu, proses ini bertujuan untuk membersihkan dan mempersiapkan data agar analisis berjalan optimal.
-# 
-# Berikut adalah tahapan-tahapan yang bisa dilakukan, tetapi **tidak terbatas** pada:
-# 1. Menghapus atau Menangani Data Kosong (Missing Values)
-# 2. Menghapus Data Duplikat
-# 3. Normalisasi atau Standarisasi Fitur
-# 4. Deteksi dan Penanganan Outlier
-# 5. Encoding Data Kategorikal
-# 6. Binning (Pengelompokan Data)
-# 
-# Cukup sesuaikan dengan karakteristik data yang kamu gunakan yah. Khususnya ketika kami menggunakan data tidak terstruktur.
 
-# %%
-check_dataset(df)
+def plot_relationships(df: pd.DataFrame, output_dir: str) -> None:
+    plt.figure(figsize=(10, 5))
+    sns.histplot(data=df, x="age", hue="sex", bins=25, kde=True, multiple="layer")
+    plt.title("Distribusi Age Berdasarkan Sex")
+    plt.xlabel("Age")
+    plt.ylabel("Frekuensi")
+    save_and_show_plot("relationship_sex_age.png", output_dir)
+    # Analisis: distribusi umur Male dan Female relatif mirip. Median umur Male
+    # adalah 55 tahun, sedikit lebih tinggi daripada Female yaitu 53 tahun, dan
+    # jumlah Male jauh lebih banyak daripada Female.
 
-# %%
-RANDOM_STATE = 42
-TARGET_COLUMN = "num"
-DROP_COLUMNS = ["id", "dataset"]
+    plt.figure(figsize=(10, 5))
+    sns.countplot(data=df, x="cp", hue="sex", order=df["cp"].value_counts().index)
+    plt.title("Hubungan Chest Pain dan Sex")
+    plt.xlabel("Chest Pain")
+    plt.ylabel("Jumlah")
+    plt.xticks(rotation=25, ha="right")
+    save_and_show_plot("relationship_chest_pain_sex.png", output_dir)
+    # Analisis: kategori chest pain asymptomatic paling dominan, terutama pada Male
+    # sebanyak 426 baris. Pada Female, atypical angina muncul 61 baris dan jauh lebih
+    # banyak daripada typical angina yang hanya 10 baris.
 
-STRING_CATEGORICAL_FEATURES = ["sex", "cp", "restecg", "slope", "thal"]
-NUMERIC_FEATURES = ["age", "trestbps", "chol", "thalch", "oldpeak", "ca"]
-BOOL_FEATURES = ["fbs", "exang"]
-OUTPUT_DIR = "./"
-TEST_SIZE = 0.2
+    plt.figure(figsize=(10, 5))
+    chest_pain_order = df.groupby("cp")["age"].median().sort_values().index
+    sns.boxplot(data=df, x="cp", y="age", order=chest_pain_order)
+    plt.title("Hubungan Chest Pain dan Age")
+    plt.xlabel("Chest Pain")
+    plt.ylabel("Age")
+    plt.xticks(rotation=25, ha="right")
+    save_and_show_plot("relationship_chest_pain_age.png", output_dir)
+    # Analisis: asymptomatic dan typical angina cenderung muncul pada umur yang lebih
+    # tinggi dengan rata-rata sekitar 55 tahun, sedangkan atypical angina memiliki
+    # rata-rata umur lebih muda yaitu sekitar 49 tahun.
 
-# %%
-def clean_raw_data(df: pd.DataFrame) -> pd.DataFrame:
+    heatmap_df = df[["age", "trestbps", "fbs", "thalch", "num"]].copy()
+    heatmap_df["fbs"] = heatmap_df["fbs"].map({True: 1, False: 0})
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(
+        heatmap_df.corr(numeric_only=True), annot=True, cmap="coolwarm", fmt=".2f"
+    )
+    plt.title("Heatmap Korelasi Age, Trestbps, Fbs, Thalch, dan Num")
+    save_and_show_plot("heatmap_age_trestbps_fbs_thalch_num.png", output_dir)
+    # Analisis: age berkorelasi positif dengan num sekitar 0.34, thalch berkorelasi
+    # negatif dengan num sekitar -0.37, dan age juga berkorelasi negatif dengan
+    # thalch sekitar -0.37.
+
+    plt.figure(figsize=(8, 5))
+    sns.countplot(data=df, x="sex", hue="fbs")
+    plt.title("Hubungan Sex dan Fbs")
+    plt.xlabel("Sex")
+    plt.ylabel("Jumlah")
+    save_and_show_plot("relationship_sex_fbs.png", output_dir)
+    # Analisis: fbs=True lebih banyak ditemukan pada Male sebanyak 119 baris
+    # dibanding Female sebanyak 19 baris, tetapi pembacaan perlu hati-hati karena
+    # jumlah pasien Male jauh lebih besar.
+
+    plt.figure(figsize=(8, 5))
+    sns.scatterplot(data=df, x="age", y="thalch", hue="sex", alpha=0.75)
+    plt.title("Hubungan Age dan Thalch")
+    plt.xlabel("Age")
+    plt.ylabel("Thalch")
+    save_and_show_plot("relationship_age_thalch.png", output_dir)
+    # Analisis: thalch cenderung menurun saat age meningkat, sesuai korelasi negatif
+    # age dan thalch sekitar -0.37 pada heatmap.
+
+
+def plot_num_distribution(
+    df: pd.DataFrame, target_column: str, output_dir: str
+) -> None:
+    health_df = df.assign(
+        health_status=np.where(df[target_column] > 0, "Sakit", "Sehat")
+    )
+
+    plt.figure(figsize=(7, 5))
+    sns.countplot(data=health_df, x="health_status", order=["Sehat", "Sakit"])
+    plt.title("Distribusi Orang Sehat dan Sakit Berdasarkan Num")
+    plt.xlabel("Status")
+    plt.ylabel("Jumlah")
+    save_and_show_plot("num_healthy_sick_distribution.png", output_dir)
+    # Analisis: kelompok Sakit lebih banyak daripada Sehat, yaitu 509 orang atau
+    # 55.33% dibanding 411 orang atau 44.67%.
+
+    plt.figure(figsize=(8, 5))
+    sns.countplot(
+        data=df, x=target_column, order=sorted(df[target_column].dropna().unique())
+    )
+    plt.title("Distribusi Stage Penyakit Berdasarkan Num")
+    plt.xlabel("Stage Num")
+    plt.ylabel("Jumlah")
+    save_and_show_plot("num_stage_distribution.png", output_dir)
+    # Analisis: stage num 0 adalah kategori terbanyak, diikuti stage 1. Stage 4 adalah
+    # kategori paling sedikit sehingga distribusi stage tidak seimbang.
+
+
+def run_eda(df: pd.DataFrame, target_column: str, output_dir: str) -> None:
+    sns.set_theme(style="whitegrid")
+
+    print("# Exploratory Data Analysis")
+    check_dataset(df)
+    print_num_analysis(df, target_column)
+
+    plot_all_column_distributions(df, output_dir)
+    plot_relationships(df, output_dir)
+    plot_num_distribution(df, target_column, output_dir)
+
+
+def clean_raw_data(
+    df: pd.DataFrame,
+    target_column: str,
+    drop_columns: list[str],
+    numeric_features: list[str],
+    bool_features: list[str],
+) -> pd.DataFrame:
     df = df.copy()
 
-    df = df.drop(columns=DROP_COLUMNS, errors="ignore")
+    df = df.drop(columns=drop_columns, errors="ignore")
 
-    # convert to boolean type.
-    for col in BOOL_FEATURES:
+    for col in bool_features:
         if col in df.columns:
             df[col] = (
                 df[col]
@@ -287,24 +312,25 @@ def clean_raw_data(df: pd.DataFrame) -> pd.DataFrame:
                 )
             )
 
-    # convert to numeric type
-    for col in NUMERIC_FEATURES:
+    for col in numeric_features:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
-    df[TARGET_COLUMN] = pd.to_numeric(df[TARGET_COLUMN], errors="coerce")
+    df[target_column] = pd.to_numeric(df[target_column], errors="coerce")
 
     df = df.drop_duplicates()
-    df = df.dropna(subset=[TARGET_COLUMN])
+    df = df.dropna(subset=[target_column])
 
-    # Target biner:
-    # 0 = tidak terindikasi heart disease
-    # 1 = terindikasi heart disease, dari num 1/2/3/4
-    df[TARGET_COLUMN] = (df[TARGET_COLUMN] > 0).astype(int)
+    df[target_column] = (df[target_column] > 0).astype(int)
 
     return df
 
-# %%
-def build_preprocessor():
+
+def build_preprocessor(
+    numeric_features: list[str],
+    string_categorical_features: list[str],
+    bool_features: list[str],
+    random_state: int,
+) -> ColumnTransformer:
     numeric_pipeline = Pipeline(
         steps=[
             (
@@ -317,14 +343,14 @@ def build_preprocessor():
                         max_features=1.0,
                         bootstrap=True,
                         max_samples=0.5,
-                        random_state=RANDOM_STATE,
+                        random_state=random_state,
                         n_jobs=-1,
                     ),
                     max_iter=20,
                     tol=0.001,
                     initial_strategy="median",
                     imputation_order="ascending",
-                    random_state=RANDOM_STATE,
+                    random_state=random_state,
                 ),
             ),
             ("scaler", StandardScaler()),
@@ -360,9 +386,9 @@ def build_preprocessor():
 
     preprocessor = ColumnTransformer(
         transformers=[
-            ("num", numeric_pipeline, NUMERIC_FEATURES),
-            ("cat", string_categorical_pipeline, STRING_CATEGORICAL_FEATURES),
-            ("bool", bool_pipeline, BOOL_FEATURES),
+            ("num", numeric_pipeline, numeric_features),
+            ("cat", string_categorical_pipeline, string_categorical_features),
+            ("bool", bool_pipeline, bool_features),
         ],
         remainder="drop",
         verbose_feature_names_out=False,
@@ -370,37 +396,98 @@ def build_preprocessor():
 
     return preprocessor
 
-# %%
-data = clean_raw_data(df)
 
-X = data.drop(columns=[TARGET_COLUMN])
-y = data[TARGET_COLUMN].astype(int)
+def preprocess_data(
+    df: pd.DataFrame,
+    target_column: str,
+    drop_columns: list[str],
+    numeric_features: list[str],
+    string_categorical_features: list[str],
+    bool_features: list[str],
+    test_size: float,
+    random_state: int,
+    output_dir: str,
+) -> None:
+    data = clean_raw_data(
+        df, target_column, drop_columns, numeric_features, bool_features
+    )
 
-check_dataset(data)
+    X = data.drop(columns=[target_column])
+    y = data[target_column].astype(int)
 
-# %%
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=TEST_SIZE, stratify=y, random_state=RANDOM_STATE
-)
+    print("# Dataset setelah preprocessing awal")
+    check_dataset(data)
 
-preprocessor = build_preprocessor()
-X_train_processed = preprocessor.fit_transform(X_train)
-X_test_processed = preprocessor.transform(X_test)
-feature_names = preprocessor.get_feature_names_out()
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=test_size, stratify=y, random_state=random_state
+    )
 
-X_train_df = pd.DataFrame(X_train_processed, columns=feature_names)
-X_test_df = pd.DataFrame(X_test_processed, columns=feature_names)
-y_train_df = pd.DataFrame({TARGET_COLUMN: y_train.reset_index(drop=True)})
-y_test_df = pd.DataFrame({TARGET_COLUMN: y_test.reset_index(drop=True)})
+    preprocessor = build_preprocessor(
+        numeric_features,
+        string_categorical_features,
+        bool_features,
+        random_state,
+    )
+    X_train_processed = preprocessor.fit_transform(X_train)
+    X_test_processed = preprocessor.transform(X_test)
+    feature_names = preprocessor.get_feature_names_out()
 
-check_dataset(X_train_df)
+    X_train_df = pd.DataFrame(X_train_processed, columns=feature_names)
+    X_test_df = pd.DataFrame(X_test_processed, columns=feature_names)
+    y_train_df = pd.DataFrame({target_column: y_train.reset_index(drop=True)})
+    y_test_df = pd.DataFrame({target_column: y_test.reset_index(drop=True)})
 
-# %%
-X_train_df.to_csv(os.path.join(OUTPUT_DIR, "X_train.csv"), index=False)
-X_test_df.to_csv(os.path.join(OUTPUT_DIR, "X_test.csv"), index=False)
-y_train_df.to_csv(os.path.join(OUTPUT_DIR, "y_train.csv"), index=False)
-y_test_df.to_csv(os.path.join(OUTPUT_DIR, "y_test.csv"), index=False)
+    print("# Dataset X_train setelah preprocessing pipeline")
+    check_dataset(X_train_df)
 
-joblib.dump(preprocessor, os.path.join(OUTPUT_DIR, "preprocessor.joblib"))
+    os.makedirs(output_dir, exist_ok=True)
+    X_train_df.to_csv(os.path.join(output_dir, "X_train.csv"), index=False)
+    X_test_df.to_csv(os.path.join(output_dir, "X_test.csv"), index=False)
+    y_train_df.to_csv(os.path.join(output_dir, "y_train.csv"), index=False)
+    y_test_df.to_csv(os.path.join(output_dir, "y_test.csv"), index=False)
+
+    joblib.dump(preprocessor, os.path.join(output_dir, "preprocessor.joblib"))
 
 
+def main() -> None:
+    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    dataset_path = os.getenv("DATASET_PATH", parent_dir)
+    kaggle_dataset = os.getenv("KAGGLE_DATASET", "redwankarimsony/heart-disease-data")
+    kaggle_csv_filename = os.getenv("KAGGLE_CSV_FILENAME", "heart_disease_uci.csv")
+    eda_output_dir = os.getenv("EDA_OUTPUT_DIR", os.path.join(current_dir, "eda_outputs"))
+    output_dir = os.getenv(
+        "OUTPUT_DIR", os.path.join(current_dir, "heartdisease_preprocessing")
+    )
+
+    random_state = 42
+    target_column = "num"
+    drop_columns = ["id", "dataset"]
+
+    string_categorical_features = ["sex", "cp", "restecg", "slope", "thal"]
+    numeric_features = ["age", "trestbps", "chol", "thalch", "oldpeak", "ca"]
+    bool_features = ["fbs", "exang"]
+    test_size = 0.2
+
+    csv_path = download_dataset_from_kagglehub(
+        kaggle_dataset,
+        kaggle_csv_filename,
+        dataset_path,
+    )
+    df = load_dataset(csv_path)
+    run_eda(df, target_column, eda_output_dir)
+    preprocess_data(
+        df,
+        target_column,
+        drop_columns,
+        numeric_features,
+        string_categorical_features,
+        bool_features,
+        test_size,
+        random_state,
+        output_dir,
+    )
+
+
+if __name__ == "__main__":
+    main()
