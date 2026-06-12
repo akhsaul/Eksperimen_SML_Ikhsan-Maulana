@@ -11,13 +11,11 @@ pandas = "==2.3.3"
 dagshub = "==0.7.0"
 matplotlib = "==3.10.9"
 joblib = "==1.5.3"
-optuna = "*"
-seaborn = "*"
-optuna-integration = {extras = ["mlflow"], version = "*"}
-ipykernel = "*"
-kagglehub = "*"
+seaborn = "==0.13.2"
+kagglehub = "==1.0.2"
 
 [dev-packages]
+ipykernel = "*"
 
 [requires]
 python_version = "3.12"
