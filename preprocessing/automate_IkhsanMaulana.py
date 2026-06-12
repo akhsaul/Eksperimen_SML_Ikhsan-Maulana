@@ -177,24 +177,12 @@ def run_eda(df: pd.DataFrame, target_column: str, output_dir: str) -> None:
             plt.xticks(rotation=30, ha="right")
             save_and_show_plot(f"distribution_{col}.png", output_dir)
 
-    # Analisis: distribusi fitur memperlihatkan dataset tidak sepenuhnya seimbang
-    # karena kelompok Male dan chest pain asymptomatic mendominasi observasi. Pola ini
-    # bisa membuat model lebih mudah mengenali karakteristik kelompok mayoritas, tetapi
-    # berisiko kurang stabil untuk pola pasien Female atau kategori chest pain yang
-    # jumlahnya kecil. Nilai 0 pada trestbps dan chol juga tidak realistis secara medis,
-    # sehingga lebih tepat diperlakukan sebagai missing/noisy value daripada sinyal klinis.
-
     plt.figure(figsize=(10, 5))
     sns.histplot(data=df, x="age", hue="sex", bins=25, kde=True, multiple="layer")
     plt.title("Distribusi Age Berdasarkan Sex")
     plt.xlabel("Age")
     plt.ylabel("Frekuensi")
     save_and_show_plot("relationship_sex_age.png", output_dir)
-    # Analisis: sebaran umur Male dan Female berada pada rentang yang mirip, sehingga
-    # perbedaan sex pada dataset ini tidak terutama dijelaskan oleh perbedaan umur.
-    # Namun jumlah Male jauh lebih besar, sehingga visual histogram lebih mencerminkan
-    # pola populasi Male. Saat fitur sex dipakai untuk modeling, evaluasi sebaiknya
-    # tetap memperhatikan performa pada Female agar model tidak bias ke kelompok mayoritas.
 
     plt.figure(figsize=(10, 5))
     sns.countplot(data=df, x="cp", hue="sex", order=df["cp"].value_counts().index)
@@ -203,11 +191,6 @@ def run_eda(df: pd.DataFrame, target_column: str, output_dir: str) -> None:
     plt.ylabel("Jumlah")
     plt.xticks(rotation=25, ha="right")
     save_and_show_plot("relationship_chest_pain_sex.png", output_dir)
-    # Analisis: asymptomatic sangat dominan pada Male, sehingga kombinasi cp dan sex
-    # kemungkinan membawa informasi kuat tentang profil risiko penyakit. Tetapi karena
-    # distribusi antar sex tidak seimbang, hubungan cp-sex tidak boleh dibaca sebagai
-    # hubungan kausal langsung. Pola ini lebih aman dipakai sebagai indikasi bahwa model
-    # perlu menangkap interaksi kategori, bukan hanya efek masing-masing fitur secara terpisah.
 
     plt.figure(figsize=(10, 5))
     chest_pain_order = df.groupby("cp")["age"].median().sort_values().index
@@ -217,11 +200,6 @@ def run_eda(df: pd.DataFrame, target_column: str, output_dir: str) -> None:
     plt.ylabel("Age")
     plt.xticks(rotation=25, ha="right")
     save_and_show_plot("relationship_chest_pain_age.png", output_dir)
-    # Analisis: chest pain tidak tersebar merata di semua umur. Atypical angina lebih
-    # banyak muncul pada kelompok usia yang lebih muda, sedangkan asymptomatic dan
-    # typical angina condong ke usia lebih tua. Ini menunjukkan age dapat menjadi faktor
-    # pengganggu saat membaca pengaruh cp terhadap target, sehingga interpretasi cp
-    # sebaiknya mempertimbangkan umur pasien.
 
     heatmap_df = df[["age", "trestbps", "fbs", "thalch", "num"]].copy()
     heatmap_df["fbs"] = heatmap_df["fbs"].map({True: 1, False: 0})
@@ -231,12 +209,6 @@ def run_eda(df: pd.DataFrame, target_column: str, output_dir: str) -> None:
     )
     plt.title("Heatmap Korelasi Age, Trestbps, Fbs, Thalch, dan Num")
     save_and_show_plot("heatmap_age_trestbps_fbs_thalch_num.png", output_dir)
-    # Analisis: heatmap menunjukkan arah hubungan yang masuk akal secara klinis: makin
-    # tua pasien, nilai num cenderung meningkat, sedangkan thalch yang lebih tinggi
-    # cenderung berkaitan dengan num yang lebih rendah. Korelasi ini tidak sangat kuat,
-    # jadi fitur numerik saja kemungkinan belum cukup untuk klasifikasi; kombinasi fitur
-    # kategorikal dan numerik tetap diperlukan. Korelasi age-thalch juga menunjukkan
-    # sebagian informasi antar fitur saling tumpang tindih.
 
     plt.figure(figsize=(8, 5))
     sns.countplot(data=df, x="sex", hue="fbs")
@@ -244,10 +216,6 @@ def run_eda(df: pd.DataFrame, target_column: str, output_dir: str) -> None:
     plt.xlabel("Sex")
     plt.ylabel("Jumlah")
     save_and_show_plot("relationship_sex_fbs.png", output_dir)
-    # Analisis: jumlah fbs=True lebih besar pada Male terutama karena jumlah sampel
-    # Male memang dominan. Karena itu visual ini lebih menunjukkan ketimpangan komposisi
-    # dataset daripada bukti kuat bahwa sex menentukan fbs. Untuk analisis yang lebih
-    # adil, proporsi fbs dalam masing-masing sex perlu dibandingkan, bukan hanya count absolut.
 
     plt.figure(figsize=(8, 5))
     sns.scatterplot(data=df, x="age", y="thalch", hue="sex", alpha=0.75)
@@ -255,11 +223,6 @@ def run_eda(df: pd.DataFrame, target_column: str, output_dir: str) -> None:
     plt.xlabel("Age")
     plt.ylabel("Thalch")
     save_and_show_plot("relationship_age_thalch.png", output_dir)
-    # Analisis: hubungan age dan thalch membentuk kecenderungan menurun, yang berarti
-    # pasien lebih tua cenderung memiliki maximum heart rate lebih rendah. Karena thalch
-    # juga berhubungan negatif dengan num, fitur ini dapat menjadi indikator kondisi
-    # kardiovaskular, tetapi interpretasinya perlu dikaitkan dengan age agar model tidak
-    # menganggap penurunan thalch sebagai sinyal yang berdiri sendiri.
 
     health_df = df.assign(
         health_status=np.where(df[target_column] > 0, "Sakit", "Sehat")
@@ -270,11 +233,6 @@ def run_eda(df: pd.DataFrame, target_column: str, output_dir: str) -> None:
     plt.xlabel("Status")
     plt.ylabel("Jumlah")
     save_and_show_plot("num_healthy_sick_distribution.png", output_dir)
-    # Analisis: target biner relatif tidak ekstrem, tetapi tetap condong ke kelas Sakit.
-    # Karena selisih kelas tidak terlalu besar, model baseline berbasis mayoritas saja
-    # tidak cukup informatif. Evaluasi model sebaiknya tidak hanya memakai accuracy,
-    # tetapi juga precision, recall, F1-score, dan confusion matrix agar kesalahan pada
-    # kelas Sehat maupun Sakit terlihat jelas.
 
     plt.figure(figsize=(8, 5))
     sns.countplot(
@@ -284,11 +242,6 @@ def run_eda(df: pd.DataFrame, target_column: str, output_dir: str) -> None:
     plt.xlabel("Stage Num")
     plt.ylabel("Jumlah")
     save_and_show_plot("num_stage_distribution.png", output_dir)
-    # Analisis: distribusi stage menunjukkan tingkat penyakit yang lebih berat jauh
-    # lebih jarang dibanding num 0 dan num 1. Jika target asli multi-class digunakan,
-    # model berisiko sulit belajar stage berat karena sampelnya sedikit. Karena pipeline
-    # mengubah num menjadi target biner, informasi tingkat keparahan hilang, tetapi
-    # keputusan ini membuat masalah klasifikasi lebih stabil untuk jumlah data saat ini.
 
 
 def clean_raw_data(
