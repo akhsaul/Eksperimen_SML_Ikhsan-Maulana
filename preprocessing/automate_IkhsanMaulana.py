@@ -53,39 +53,19 @@ def load_dataset(csv_path: str) -> pd.DataFrame:
     return pd.read_csv(csv_path)
 
 
-def build_column_summary(df: pd.DataFrame) -> pd.DataFrame:
-    summary_rows = []
-
-    for col in df.columns:
-        series = df[col]
-        non_null_series = series.dropna()
-
-        if non_null_series.empty:
-            lowest_value = np.nan
-            highest_value = np.nan
-        elif pd.api.types.is_numeric_dtype(series):
-            lowest_value = series.min(skipna=True)
-            highest_value = series.max(skipna=True)
-        else:
-            string_series = non_null_series.astype(str)
-            lowest_value = string_series.min()
-            highest_value = string_series.max()
-
-        summary_rows.append(
-            {
-                "column": col,
-                "dtype": series.dtype,
-                "missing_count": series.isna().sum(),
-                "lowest_value": lowest_value,
-                "highest_value": highest_value,
-                "total_unique_value": series.nunique(dropna=True),
-            }
-        )
-
-    return pd.DataFrame(summary_rows)
+def save_and_show_plot(filename: str, output_dir: str) -> None:
+    os.makedirs(output_dir, exist_ok=True)
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, filename), dpi=150, bbox_inches="tight")
+    if "agg" not in plt.get_backend().lower():
+        plt.show()
+    plt.close()
 
 
-def check_dataset(df: pd.DataFrame) -> None:
+def run_eda(df: pd.DataFrame, target_column: str, output_dir: str) -> None:
+    sns.set_theme(style="whitegrid")
+
+    print("# Exploratory Data Analysis")
     n_rows, n_cols = df.shape
     print(f"Dataset shape: {n_rows} Rows x {n_cols} Columns", end="\n\n")
 
@@ -125,20 +105,37 @@ def check_dataset(df: pd.DataFrame) -> None:
         print(duplicate_rows)
     print()
 
+    summary_rows = []
+    for col in df.columns:
+        series = df[col]
+        non_null_series = series.dropna()
+
+        if non_null_series.empty:
+            lowest_value = np.nan
+            highest_value = np.nan
+        elif pd.api.types.is_numeric_dtype(series):
+            lowest_value = series.min(skipna=True)
+            highest_value = series.max(skipna=True)
+        else:
+            string_series = non_null_series.astype(str)
+            lowest_value = string_series.min()
+            highest_value = string_series.max()
+
+        summary_rows.append(
+            {
+                "column": col,
+                "dtype": series.dtype,
+                "missing_count": series.isna().sum(),
+                "lowest_value": lowest_value,
+                "highest_value": highest_value,
+                "total_unique_value": series.nunique(dropna=True),
+            }
+        )
+
+    column_summary = pd.DataFrame(summary_rows)
     print("Lowest value, highest value, dan total unique value semua kolom:")
-    print(build_column_summary(df), end="\n\n")
+    print(column_summary, end="\n\n")
 
-
-def save_and_show_plot(filename: str, output_dir: str) -> None:
-    os.makedirs(output_dir, exist_ok=True)
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, filename), dpi=150, bbox_inches="tight")
-    if "agg" not in plt.get_backend().lower():
-        plt.show()
-    plt.close()
-
-
-def print_num_analysis(df: pd.DataFrame, target_column: str) -> None:
     health_status = np.where(df[target_column] > 0, "Sakit", "Sehat")
     health_counts = pd.Series(health_status, name="health_status").value_counts()
     health_summary = pd.DataFrame(
@@ -162,8 +159,6 @@ def print_num_analysis(df: pd.DataFrame, target_column: str) -> None:
     print("Kolom num - jumlah dan persentase berdasarkan stage:")
     print(stage_summary, end="\n\n")
 
-
-def plot_all_column_distributions(df: pd.DataFrame, output_dir: str) -> None:
     for col in df.columns:
         plt.figure(figsize=(10, 5))
 
@@ -187,8 +182,6 @@ def plot_all_column_distributions(df: pd.DataFrame, output_dir: str) -> None:
     # 0/1. Kolom trestbps dan chol memiliki nilai minimum 0 sehingga perlu ditinjau
     # sebagai nilai yang tidak wajar untuk tekanan darah dan kolesterol.
 
-
-def plot_relationships(df: pd.DataFrame, output_dir: str) -> None:
     plt.figure(figsize=(10, 5))
     sns.histplot(data=df, x="age", hue="sex", bins=25, kde=True, multiple="layer")
     plt.title("Distribusi Age Berdasarkan Sex")
@@ -253,14 +246,9 @@ def plot_relationships(df: pd.DataFrame, output_dir: str) -> None:
     # Analisis: thalch cenderung menurun saat age meningkat, sesuai korelasi negatif
     # age dan thalch sekitar -0.37 pada heatmap.
 
-
-def plot_num_distribution(
-    df: pd.DataFrame, target_column: str, output_dir: str
-) -> None:
     health_df = df.assign(
         health_status=np.where(df[target_column] > 0, "Sakit", "Sehat")
     )
-
     plt.figure(figsize=(7, 5))
     sns.countplot(data=health_df, x="health_status", order=["Sehat", "Sakit"])
     plt.title("Distribusi Orang Sehat dan Sakit Berdasarkan Num")
@@ -280,18 +268,6 @@ def plot_num_distribution(
     save_and_show_plot("num_stage_distribution.png", output_dir)
     # Analisis: stage num 0 adalah kategori terbanyak, diikuti stage 1. Stage 4 adalah
     # kategori paling sedikit sehingga distribusi stage tidak seimbang.
-
-
-def run_eda(df: pd.DataFrame, target_column: str, output_dir: str) -> None:
-    sns.set_theme(style="whitegrid")
-
-    print("# Exploratory Data Analysis")
-    check_dataset(df)
-    print_num_analysis(df, target_column)
-
-    plot_all_column_distributions(df, output_dir)
-    plot_relationships(df, output_dir)
-    plot_num_distribution(df, target_column, output_dir)
 
 
 def clean_raw_data(
@@ -430,7 +406,9 @@ def preprocess_data(
     y = data[target_column].astype(int)
 
     print("# Dataset setelah preprocessing awal")
-    check_dataset(data)
+    print(f"Dataset shape: {data.shape[0]} Rows x {data.shape[1]} Columns")
+    print("Missing values:")
+    print(data.isnull().sum(), end="\n\n")
 
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=test_size, stratify=y, random_state=random_state
@@ -452,7 +430,9 @@ def preprocess_data(
     y_test_df = pd.DataFrame({target_column: y_test.reset_index(drop=True)})
 
     print("# Dataset X_train setelah preprocessing pipeline")
-    check_dataset(X_train_df)
+    print(f"Dataset shape: {X_train_df.shape[0]} Rows x {X_train_df.shape[1]} Columns")
+    print("Missing values:")
+    print(X_train_df.isnull().sum(), end="\n\n")
 
     os.makedirs(output_dir, exist_ok=True)
     X_train_df.to_csv(os.path.join(output_dir, "X_train.csv"), index=False)
