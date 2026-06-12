@@ -1,11 +1,11 @@
 import warnings
 import os
+import shutil
 import joblib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import kagglehub
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.exceptions import ConvergenceWarning
@@ -23,13 +23,27 @@ def download_dataset_from_kagglehub(
     kaggle_csv_filename: str,
     dataset_path: str,
 ) -> str:
+    import kagglehub
+
     csv_path = kagglehub.dataset_download(
         kaggle_dataset,
         path=kaggle_csv_filename,
         output_dir=dataset_path,
-        force_download=False,
     )
     return csv_path
+
+
+def rename_downloaded_dataset(
+    csv_path: str, dataset_path: str, raw_filename: str
+) -> str:
+    os.makedirs(dataset_path, exist_ok=True)
+    raw_dataset_path = os.path.join(dataset_path, raw_filename)
+
+    if os.path.abspath(csv_path) == os.path.abspath(raw_dataset_path):
+        return raw_dataset_path
+
+    shutil.copy2(csv_path, raw_dataset_path)
+    return raw_dataset_path
 
 
 def load_dataset(csv_path: str) -> pd.DataFrame:
@@ -39,13 +53,36 @@ def load_dataset(csv_path: str) -> pd.DataFrame:
     return pd.read_csv(csv_path)
 
 
-def save_and_show_plot(filename: str, output_dir: str) -> None:
-    os.makedirs(output_dir, exist_ok=True)
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, filename), dpi=150, bbox_inches="tight")
-    if "agg" not in plt.get_backend().lower():
-        plt.show()
-    plt.close()
+def build_column_summary(df: pd.DataFrame) -> pd.DataFrame:
+    summary_rows = []
+
+    for col in df.columns:
+        series = df[col]
+        non_null_series = series.dropna()
+
+        if non_null_series.empty:
+            lowest_value = np.nan
+            highest_value = np.nan
+        elif pd.api.types.is_numeric_dtype(series):
+            lowest_value = series.min(skipna=True)
+            highest_value = series.max(skipna=True)
+        else:
+            string_series = non_null_series.astype(str)
+            lowest_value = string_series.min()
+            highest_value = string_series.max()
+
+        summary_rows.append(
+            {
+                "column": col,
+                "dtype": series.dtype,
+                "missing_count": series.isna().sum(),
+                "lowest_value": lowest_value,
+                "highest_value": highest_value,
+                "total_unique_value": series.nunique(dropna=True),
+            }
+        )
+
+    return pd.DataFrame(summary_rows)
 
 
 def check_dataset(df: pd.DataFrame) -> None:
@@ -92,36 +129,13 @@ def check_dataset(df: pd.DataFrame) -> None:
     print(build_column_summary(df), end="\n\n")
 
 
-def build_column_summary(df: pd.DataFrame) -> pd.DataFrame:
-    summary_rows = []
-
-    for col in df.columns:
-        series = df[col]
-        non_null_series = series.dropna()
-
-        if non_null_series.empty:
-            lowest_value = np.nan
-            highest_value = np.nan
-        elif pd.api.types.is_numeric_dtype(series):
-            lowest_value = series.min(skipna=True)
-            highest_value = series.max(skipna=True)
-        else:
-            string_series = non_null_series.astype(str)
-            lowest_value = string_series.min()
-            highest_value = string_series.max()
-
-        summary_rows.append(
-            {
-                "column": col,
-                "dtype": series.dtype,
-                "missing_count": series.isna().sum(),
-                "lowest_value": lowest_value,
-                "highest_value": highest_value,
-                "total_unique_value": series.nunique(dropna=True),
-            }
-        )
-
-    return pd.DataFrame(summary_rows)
+def save_and_show_plot(filename: str, output_dir: str) -> None:
+    os.makedirs(output_dir, exist_ok=True)
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, filename), dpi=150, bbox_inches="tight")
+    if "agg" not in plt.get_backend().lower():
+        plt.show()
+    plt.close()
 
 
 def print_num_analysis(df: pd.DataFrame, target_column: str) -> None:
@@ -455,7 +469,10 @@ def main() -> None:
     dataset_path = os.getenv("DATASET_PATH", parent_dir)
     kaggle_dataset = os.getenv("KAGGLE_DATASET", "redwankarimsony/heart-disease-data")
     kaggle_csv_filename = os.getenv("KAGGLE_CSV_FILENAME", "heart_disease_uci.csv")
-    eda_output_dir = os.getenv("EDA_OUTPUT_DIR", os.path.join(current_dir, "eda_outputs"))
+    raw_dataset_filename = "heartdisease_raw.csv"
+    eda_output_dir = os.getenv(
+        "EDA_OUTPUT_DIR", os.path.join(current_dir, "eda_outputs")
+    )
     output_dir = os.getenv(
         "OUTPUT_DIR", os.path.join(current_dir, "heartdisease_preprocessing")
     )
@@ -474,7 +491,12 @@ def main() -> None:
         kaggle_csv_filename,
         dataset_path,
     )
-    df = load_dataset(csv_path)
+    raw_dataset_path = rename_downloaded_dataset(
+        csv_path,
+        dataset_path,
+        raw_dataset_filename,
+    )
+    df = load_dataset(raw_dataset_path)
     run_eda(df, target_column, eda_output_dir)
     preprocess_data(
         df,
