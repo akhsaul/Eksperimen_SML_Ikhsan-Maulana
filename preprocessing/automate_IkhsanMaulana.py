@@ -22,6 +22,7 @@ def download_dataset_from_kagglehub(
     kaggle_dataset: str,
     kaggle_csv_filename: str,
     dataset_path: str,
+    force_download: bool = False,
 ) -> str:
     import kagglehub
 
@@ -29,6 +30,7 @@ def download_dataset_from_kagglehub(
         kaggle_dataset,
         path=kaggle_csv_filename,
         output_dir=dataset_path,
+        force_download=force_download,
     )
     return csv_path
 
@@ -423,6 +425,7 @@ def main() -> None:
     dataset_path = os.getenv("DATASET_PATH", parent_dir)
     kaggle_dataset = os.getenv("KAGGLE_DATASET", "redwankarimsony/heart-disease-data")
     kaggle_csv_filename = os.getenv("KAGGLE_CSV_FILENAME", "heart_disease_uci.csv")
+    kaggle_force_download = os.getenv("KAGGLE_FORCE_DOWNLOAD", "false") == "true"
     raw_dataset_filename = "heartdisease_raw.csv"
     eda_output_dir = os.getenv(
         "EDA_OUTPUT_DIR", os.path.join(current_dir, "eda_outputs")
@@ -441,9 +444,7 @@ def main() -> None:
     test_size = 0.2
 
     csv_path = download_dataset_from_kagglehub(
-        kaggle_dataset,
-        kaggle_csv_filename,
-        dataset_path,
+        kaggle_dataset, kaggle_csv_filename, dataset_path, kaggle_force_download
     )
     raw_dataset_path = rename_downloaded_dataset(
         csv_path,
