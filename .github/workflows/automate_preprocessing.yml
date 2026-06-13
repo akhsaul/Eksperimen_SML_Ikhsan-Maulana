@@ -37,10 +37,11 @@ jobs:
 
     - name: Commit and Push Processed Dataset to Repository
       run: |
-        git config --global user.name "GitHub Actions Bot"
-        git config --global user.email "actions@github.com"
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
         tar -I 'zstd -20 --ultra' -cvf preprocessing/heartdisease_preprocessing/preprocessor.tar.zst preprocessing/heartdisease_preprocessing/preprocessor.joblib
+        rm -f preprocessing/heartdisease_preprocessing/preprocessor.joblib
 
         git add preprocessing/eda_outputs/
         git add preprocessing/heartdisease_preprocessing/
