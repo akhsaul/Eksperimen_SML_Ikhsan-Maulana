@@ -1,0 +1,58 @@
+name: Run Automate Preprocessing
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/automate_preprocessing.yml'
+      - 'preprocessing/automate_IkhsanMaulana.py'
+      - 'heart_failure_raw.csv'
+  workflow_dispatch:
+
+jobs:
+  run-preprocessing:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v6
+
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.12.7'
+
+    - name: Install Dependencies
+      run: |
+        pip install -r requirements.txt
+
+    - name: Run Preprocessing Script
+      run: |
+        python preprocessing/automate_IkhsanMaulana.py
+
+    - name: Commit and Push Processed Dataset to Repository
+      run: |
+        git config --global user.name "GitHub Actions Bot"
+        git config --global user.email "actions@github.com"
+
+        tar -I 'zstd -20 --ultra' -cvf preprocessing/heartdisease_preprocessing/preprocessor.tar.zst preprocessing/heartdisease_preprocessing/preprocessor.joblib
+
+        git add preprocessing/eda_outputs/
+        git add preprocessing/heartdisease_preprocessing/
+
+        git commit -m "Update: Processed Datasets for ${{ github.sha }}"
+        git push
+
+    - name: Upload Processed Dataset as Artifact
+      uses: actions/upload-artifact@v7
+      with:
+        name: preprocessed-datasets
+        path: |
+          preprocessing/heartdisease_preprocessing/X_train.csv
+          preprocessing/heartdisease_preprocessing/X_test.csv
+          preprocessing/heartdisease_preprocessing/y_train.csv
+          preprocessing/heartdisease_preprocessing/y_test.csv
+          preprocessing/heartdisease_preprocessing/preprocessor.tar.zst
